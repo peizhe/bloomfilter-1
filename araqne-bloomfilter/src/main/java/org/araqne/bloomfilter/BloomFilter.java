@@ -15,6 +15,12 @@
  */
 package org.araqne.bloomfilter;
 
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.BitSet;
 
 public class BloomFilter<T> {
@@ -22,26 +28,23 @@ public class BloomFilter<T> {
 	private final int numOfHashFunction;
 	private final HashFunction<T> firstFunction;
 	private final HashFunction<T> secondFunction;
-	private final BitSet bitmap;
+	private BitSet bitmap;
 
 	@SuppressWarnings("unchecked")
 	public BloomFilter() {
-		this(GeneralHashFunction.stringHashFunctions[2],
-				GeneralHashFunction.stringHashFunctions[1]);
+		this(GeneralHashFunction.stringHashFunctions[2], GeneralHashFunction.stringHashFunctions[1]);
 	}
 
 	@SuppressWarnings("unchecked")
 	public BloomFilter(long capacity) {
-		this(0.001, capacity, GeneralHashFunction.stringHashFunctions[2],
-				GeneralHashFunction.stringHashFunctions[1]);
+		this(0.001, capacity, GeneralHashFunction.stringHashFunctions[2], GeneralHashFunction.stringHashFunctions[1]);
 	}
 
 	public BloomFilter(HashFunction<T> first, HashFunction<T> second) {
 		this(0.001, 1000000L, first, second);
 	}
 
-	public BloomFilter(double errorRate, long capacity, HashFunction<T> first,
-			HashFunction<T> second) {
+	public BloomFilter(double errorRate, long capacity, HashFunction<T> first, HashFunction<T> second) {
 		OptimumFinder opt = new OptimumFinder(errorRate, capacity);
 		this.firstFunction = first;
 		this.secondFunction = second;
@@ -50,8 +53,7 @@ public class BloomFilter<T> {
 		this.bitmap = new BitSet(numOfBits);
 	}
 
-	public BloomFilter(double errorRate, long capacity, HashFunction<T> first,
-			HashFunction<T> second, BitSet bitmap) {
+	public BloomFilter(double errorRate, long capacity, HashFunction<T> first, HashFunction<T> second, BitSet bitmap) {
 		OptimumFinder opt = new OptimumFinder(errorRate, capacity);
 		this.firstFunction = first;
 		this.secondFunction = second;
@@ -86,10 +88,57 @@ public class BloomFilter<T> {
 		return bitmap;
 	}
 
+	public void load(InputStream is) throws IOException {
+		DataInputStream dis = new DataInputStream(is);
+		int length = dis.readInt();
+		BitSet set = new BitSet(length);
+
+		int p = 0;
+		try {
+			while (true) {
+				long l = dis.readLong();
+				for (int i = 63; i >= 0; i--) {
+					if (p >= length)
+						break;
+
+					set.set(p, ((l >> i) & 1) == 1);
+					p++;
+				}
+			}
+		} catch (EOFException e) {
+			// ignore
+		}
+
+		this.bitmap = set;
+	}
+
+	public void save(OutputStream os) throws IOException {
+		int count = 0;
+
+		DataOutputStream dos = new DataOutputStream(os);
+		dos.writeInt(bitmap.length());
+
+		long l = 0;
+		for (int i = 0; i < bitmap.length(); i++) {
+			l <<= 1;
+			l |= bitmap.get(i) ? 1 : 0;
+
+			if (count++ == 63) {
+				dos.writeLong(l);
+				l = 0;
+				count = 0;
+			}
+		}
+
+		if (bitmap.length() % 64 != 0) {
+			l <<= 64 - count;
+			dos.writeLong(l);
+		}
+	}
+
 	@Override
 	public String toString() {
-		return String.format("BloomFilter-[%d KB, %d hashFunctions (%s, %s)]",
-				this.numOfBits / 8 / 1024, this.numOfHashFunction,
+		return String.format("BloomFilter-[%d KB, %d hashFunctions (%s, %s)]", this.numOfBits / 8 / 1024, this.numOfHashFunction,
 				this.firstFunction.toString(), this.secondFunction.toString());
 	}
 
@@ -108,8 +157,7 @@ public class BloomFilter<T> {
 			int m = 0;
 
 			for (int k = 1; k < 20; k++) {
-				m = (int) (k * capacity * -1.0 / java.lang.Math
-						.log(1.0 - java.lang.Math.pow(errorRate, (1.0 / k))));
+				m = (int) (k * capacity * -1.0 / java.lang.Math.log(1.0 - java.lang.Math.pow(errorRate, (1.0 / k))));
 
 				if (m < numOfBits) {
 					numOfBits = m;
