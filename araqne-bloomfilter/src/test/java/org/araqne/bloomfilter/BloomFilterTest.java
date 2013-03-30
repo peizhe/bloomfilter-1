@@ -2,10 +2,15 @@ package org.araqne.bloomfilter;
 
 import static org.junit.Assert.*;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 
+import org.junit.Ignore;
 import org.junit.Test;
 
 public class BloomFilterTest {
@@ -16,9 +21,7 @@ public class BloomFilterTest {
 	// success : 0-1, 2, 3, 1-2, 3, 2-1, 3-1
 	@SuppressWarnings("unchecked")
 	public void init(int num, boolean doMap) {
-		filter = new BloomFilter<String>(
-				GeneralHashFunction.stringHashFunctions[2],
-				GeneralHashFunction.stringHashFunctions[1]);
+		filter = new BloomFilter<String>(GeneralHashFunction.stringHashFunctions[2], GeneralHashFunction.stringHashFunctions[1]);
 		map = new HashSet<String>(num);
 
 		String in;
@@ -61,10 +64,40 @@ public class BloomFilterTest {
 				count++;
 		}
 
-		System.out.printf("false positive count: %d, rate : %f\n", count,
-				count / 5000D);
+		System.out.printf("false positive count: %d, rate : %f\n", count, count / 5000D);
 		assertTrue(count < 1000);
 		System.out.println(new Date());
+	}
+
+	@Test
+	public void test6and7Encoding() throws IOException {
+		BloomFilter<String> filter = new BloomFilter<String>(100);
+		filter.add("test");
+
+		// jdk 7
+		ByteArrayOutputStream os1 = new ByteArrayOutputStream();
+		filter.save(os1);
+		byte[] b1 = os1.toByteArray();
+
+		// under jdk 6
+		ByteArrayOutputStream os2 = new ByteArrayOutputStream();
+		filter.save(os2, true);
+		byte[] b2 = os2.toByteArray();
+
+		assertTrue(Arrays.equals(b1, b2));
+
+		BloomFilter<String> nbf1 = new BloomFilter<String>(100);
+		nbf1.load(new ByteArrayInputStream(b1));
+
+		BloomFilter<String> nbf2 = new BloomFilter<String>(100);
+		nbf2.load(new ByteArrayInputStream(b1), true);
+
+		assertTrue(filter.contains("test"));
+		assertTrue(nbf1.contains("test"));
+		assertTrue(nbf2.contains("test"));
+		assertTrue(filter.getBitmap().equals(nbf1.getBitmap()));
+		assertTrue(filter.getBitmap().equals(nbf2.getBitmap()));
+		assertTrue(nbf1.getBitmap().equals(nbf2.getBitmap()));
 	}
 
 	public abstract static class VMIDGen {

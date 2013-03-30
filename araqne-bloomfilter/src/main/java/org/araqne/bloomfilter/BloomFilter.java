@@ -90,98 +90,121 @@ public class BloomFilter<T> {
 	}
 
 	public void load(InputStream is) throws IOException {
+		load(is, false);
+	}
+
+	public void load(InputStream is, boolean noaccel) throws IOException {
 		DataInputStream dis = new DataInputStream(is);
 		int length = dis.readInt();
 
 		// try jdk 7 acceleration
-		try {
-			LongBuffer buf = LongBuffer.allocate(length / 8 + 1);
+		if (!noaccel) {
 			try {
-				while (true) {
-					long l = dis.readLong();
-					buf.put(l);
-				}
-			} catch (EOFException eof) {
-			}
-
-			buf.flip();
-			this.bitmap = BitSet.valueOf(buf);
-		} catch (NoSuchMethodError e) {
-			BitSet set = new BitSet(length);
-			int p = 0;
-			try {
-				while (true) {
-					long l = dis.readLong();
-					for (int i = 63; i >= 0; i--) {
-						if (p >= length)
-							break;
-
-						set.set(p, ((l >> i) & 1) == 1);
-						p++;
+				LongBuffer buf = LongBuffer.allocate(length / 8 + 1);
+				try {
+					while (true) {
+						long l = dis.readLong();
+						buf.put(l);
 					}
+				} catch (EOFException eof) {
 				}
-			} catch (EOFException eof) {
-				// ignore
+
+				buf.flip();
+				this.bitmap = BitSet.valueOf(buf);
+				return;
+			} catch (NoSuchMethodError e) {
 			}
-			this.bitmap = set;
 		}
+
+		BitSet set = new BitSet(length);
+		int p = 0;
+		try {
+			while (true) {
+				long l = Long.reverse(dis.readLong());
+				for (int i = 63; i >= 0; i--) {
+					if (p >= length)
+						break;
+
+					set.set(p, ((l >> i) & 1) == 1);
+					p++;
+				}
+			}
+		} catch (EOFException eof) {
+			// ignore
+		}
+		this.bitmap = set;
 	}
 
 	public long streamLength() {
-		try {
-			long[] words = bitmap.toLongArray();
-			return words.length * 8 + 4;
-		} catch (NoSuchMethodError e) {
-			int count = 0;
-			long wrote = 4;
-			for (int i = 0; i < bitmap.length(); i++) {
-				if (count++ == 63) {
-					wrote += 8;
-					count = 0;
-				}
-			}
+		return streamLength(false);
+	}
 
-			if (bitmap.length() % 64 != 0) {
-				wrote += 8;
+	public long streamLength(boolean noaccel) {
+		if (!noaccel) {
+			try {
+				long[] words = bitmap.toLongArray();
+				return words.length * 8 + 4;
+			} catch (NoSuchMethodError e) {
 			}
-			return wrote;
 		}
+
+		int count = 0;
+		long wrote = 4;
+		for (int i = 0; i < bitmap.length(); i++) {
+			if (count++ == 63) {
+				wrote += 8;
+				count = 0;
+			}
+		}
+
+		if (bitmap.length() % 64 != 0) {
+			wrote += 8;
+		}
+		return wrote;
 	}
 
 	public long save(OutputStream os) throws IOException {
+		return save(os, false);
+	}
+
+	public long save(OutputStream os, boolean noaccel) throws IOException {
 		DataOutputStream dos = new DataOutputStream(os);
 		dos.writeInt(bitmap.length());
 
 		// try jdk 7 accelration first
-		try {
-			long[] words = bitmap.toLongArray();
-			for (long word : words)
-				dos.writeLong(word);
-			return words.length * 8 + 4;
-		} catch (NoSuchMethodError e) {
-			int count = 0;
-
-			long l = 0;
-			long wrote = 4;
-			for (int i = 0; i < bitmap.length(); i++) {
-				l <<= 1;
-				l |= bitmap.get(i) ? 1 : 0;
-
-				if (count++ == 63) {
-					dos.writeLong(l);
-					wrote += 8;
-					l = 0;
-					count = 0;
+		if (!noaccel) {
+			try {
+				long[] words = bitmap.toLongArray();
+				for (long word : words) {
+					dos.writeLong(word);
 				}
+				return words.length * 8 + 4;
+			} catch (NoSuchMethodError e) {
 			}
-
-			if (bitmap.length() % 64 != 0) {
-				l <<= 64 - count;
-				dos.writeLong(l);
-				wrote += 8;
-			}
-			return wrote;
 		}
+
+		int count = 0;
+
+		long l = 0;
+		long wrote = 4;
+		for (int i = 0; i < bitmap.length(); i++) {
+			l <<= 1;
+			l |= bitmap.get(i) ? 1 : 0;
+
+			if (count++ == 63) {
+				dos.writeLong(Long.reverse(l));
+				wrote += 8;
+				l = 0;
+				count = 0;
+			}
+		}
+
+		if (bitmap.length() % 64 != 0) {
+			l <<= 64 - count;
+			dos.writeLong(Long.reverse(l));
+			wrote += 8;
+		}
+		return wrote;
 	}
 
 	@Override
