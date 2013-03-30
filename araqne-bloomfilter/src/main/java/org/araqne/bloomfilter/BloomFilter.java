@@ -21,6 +21,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.LongBuffer;
 import java.util.BitSet;
 
 public class BloomFilter<T> {
@@ -91,71 +92,96 @@ public class BloomFilter<T> {
 	public void load(InputStream is) throws IOException {
 		DataInputStream dis = new DataInputStream(is);
 		int length = dis.readInt();
-		BitSet set = new BitSet(length);
 
-		int p = 0;
+		// try jdk 7 acceleration
 		try {
-			while (true) {
-				long l = dis.readLong();
-				for (int i = 63; i >= 0; i--) {
-					if (p >= length)
-						break;
+			LongBuffer buf = LongBuffer.allocate(length / 8 + 1);
+			try {
+				while (true) {
+					long l = dis.readLong();
+					buf.put(l);
+				}
+			} catch (EOFException eof) {
+			}
 
-					set.set(p, ((l >> i) & 1) == 1);
-					p++;
+			buf.flip();
+			this.bitmap = BitSet.valueOf(buf);
+		} catch (NoSuchMethodError e) {
+			BitSet set = new BitSet(length);
+			int p = 0;
+			try {
+				while (true) {
+					long l = dis.readLong();
+					for (int i = 63; i >= 0; i--) {
+						if (p >= length)
+							break;
+
+						set.set(p, ((l >> i) & 1) == 1);
+						p++;
+					}
+				}
+			} catch (EOFException eof) {
+				// ignore
+			}
+			this.bitmap = set;
+		}
+	}
+
+	public long streamLength() {
+		try {
+			long[] words = bitmap.toLongArray();
+			return words.length * 8;
+		} catch (NoSuchMethodError e) {
+			int count = 0;
+			long wrote = 4;
+			for (int i = 0; i < bitmap.length(); i++) {
+				if (count++ == 63) {
+					wrote += 8;
+					count = 0;
 				}
 			}
-		} catch (EOFException e) {
-			// ignore
-		}
 
-		this.bitmap = set;
-	}
-	
-	public long streamLength() {
-		long l = 0;
-		int count = 0;
-		long wrote = 4;
-		for (int i = 0; i < bitmap.length(); i++) {
-			if (count++ == 63) {
+			if (bitmap.length() % 64 != 0) {
 				wrote += 8;
-				count = 0;
 			}
+			return wrote;
 		}
-
-		if (bitmap.length() % 64 != 0) {
-			wrote += 8;
-		}
-		return wrote;
 	}
 
 	public long save(OutputStream os) throws IOException {
-		int count = 0;
-
 		DataOutputStream dos = new DataOutputStream(os);
 		dos.writeInt(bitmap.length());
 
-		long l = 0;
-		long wrote = 4;
-		for (int i = 0; i < bitmap.length(); i++) {
-			l <<= 1;
-			l |= bitmap.get(i) ? 1 : 0;
+		// try jdk 7 accelration first
+		try {
+			long[] words = bitmap.toLongArray();
+			for (long word : words)
+				dos.writeLong(word);
+			return words.length * 8;
+		} catch (NoSuchMethodError e) {
+			int count = 0;
 
-			if (count++ == 63) {
+			long l = 0;
+			long wrote = 4;
+			for (int i = 0; i < bitmap.length(); i++) {
+				l <<= 1;
+				l |= bitmap.get(i) ? 1 : 0;
+
+				if (count++ == 63) {
+					dos.writeLong(l);
+					wrote += 8;
+					l = 0;
+					count = 0;
+				}
+			}
+
+			if (bitmap.length() % 64 != 0) {
+				l <<= 64 - count;
 				dos.writeLong(l);
 				wrote += 8;
-				l = 0;
-				count = 0;
 			}
+			return wrote;
 		}
-
-		if (bitmap.length() % 64 != 0) {
-			l <<= 64 - count;
-			dos.writeLong(l);
-			wrote += 8;
-		}
-		
-		return wrote;
 	}
 
 	@Override
