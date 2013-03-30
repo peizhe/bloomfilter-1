@@ -111,20 +111,39 @@ public class BloomFilter<T> {
 
 		this.bitmap = set;
 	}
+	
+	public long streamLength() {
+		long l = 0;
+		int count = 0;
+		long wrote = 4;
+		for (int i = 0; i < bitmap.length(); i++) {
+			if (count++ == 63) {
+				wrote += 8;
+				count = 0;
+			}
+		}
 
-	public void save(OutputStream os) throws IOException {
+		if (bitmap.length() % 64 != 0) {
+			wrote += 8;
+		}
+		return wrote;
+	}
+
+	public long save(OutputStream os) throws IOException {
 		int count = 0;
 
 		DataOutputStream dos = new DataOutputStream(os);
 		dos.writeInt(bitmap.length());
 
 		long l = 0;
+		long wrote = 4;
 		for (int i = 0; i < bitmap.length(); i++) {
 			l <<= 1;
 			l |= bitmap.get(i) ? 1 : 0;
 
 			if (count++ == 63) {
 				dos.writeLong(l);
+				wrote += 8;
 				l = 0;
 				count = 0;
 			}
@@ -133,7 +152,10 @@ public class BloomFilter<T> {
 		if (bitmap.length() % 64 != 0) {
 			l <<= 64 - count;
 			dos.writeLong(l);
+			wrote += 8;
 		}
+		
+		return wrote;
 	}
 
 	@Override
