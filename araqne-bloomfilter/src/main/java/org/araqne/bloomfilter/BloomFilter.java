@@ -130,7 +130,7 @@ public class BloomFilter<T> {
 	public long streamLength() {
 		try {
 			long[] words = bitmap.toLongArray();
-			return words.length * 8;
+			return words.length * 8 + 4;
 		} catch (NoSuchMethodError e) {
 			int count = 0;
 			long wrote = 4;
@@ -157,7 +157,7 @@ public class BloomFilter<T> {
 			long[] words = bitmap.toLongArray();
 			for (long word : words)
 				dos.writeLong(word);
-			return words.length * 8;
+			return words.length * 8 + 4;
 		} catch (NoSuchMethodError e) {
 			int count = 0;
 
