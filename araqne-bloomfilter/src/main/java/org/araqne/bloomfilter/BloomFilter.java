@@ -62,6 +62,10 @@ public class BloomFilter<T> {
 		this.bitmap = bitmap;
 	}
 
+	public BloomFilter(double errorRate, int capacity) {
+		this(errorRate, capacity, GeneralHashFunction.stringHashFunctions[2], GeneralHashFunction.stringHashFunctions[1]);
+	}
+
 	public void add(T key) {
 		int firstHashCode = firstFunction.hashCode(key);
 		int secondHashCode = secondFunction.hashCode(key);
