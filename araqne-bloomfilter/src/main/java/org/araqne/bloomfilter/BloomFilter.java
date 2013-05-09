@@ -25,8 +25,8 @@ import java.nio.LongBuffer;
 import java.util.BitSet;
 
 public class BloomFilter<T> {
-	private final int numOfBits;
-	private final int numOfHashFunction;
+	private int numOfBits;
+	private int numOfHashFunction;
 	private final HashFunction<T> firstFunction;
 	private final HashFunction<T> secondFunction;
 	private BitSet bitmap;
@@ -49,24 +49,20 @@ public class BloomFilter<T> {
 		OptimumFinder opt = new OptimumFinder(errorRate, capacity);
 		this.firstFunction = first;
 		this.secondFunction = second;
-		this.numOfHashFunction = opt.numOfHashFunction;
-		this.numOfBits = opt.numOfBits;
-		this.bitmap = new BitSet(numOfBits);
+		attach(new BitSet(opt.numOfBits), opt.numOfBits, opt.numOfHashFunction);
 	}
 
 	public BloomFilter(double errorRate, long capacity, HashFunction<T> first, HashFunction<T> second, BitSet bitmap) {
 		OptimumFinder opt = new OptimumFinder(errorRate, capacity);
 		this.firstFunction = first;
 		this.secondFunction = second;
-		this.numOfHashFunction = opt.numOfHashFunction;
-		this.numOfBits = opt.numOfBits;
-		this.bitmap = bitmap;
+		attach(new BitSet(opt.numOfBits), opt.numOfBits, opt.numOfHashFunction);
 	}
 
 	public BloomFilter(double errorRate, int capacity) {
 		this(errorRate, capacity, GeneralHashFunction.stringHashFunctions[2], GeneralHashFunction.stringHashFunctions[1]);
 	}
-
+	
 	public void add(T key) {
 		int firstHashCode = firstFunction.hashCode(key);
 		int secondHashCode = secondFunction.hashCode(key);
@@ -101,10 +97,16 @@ public class BloomFilter<T> {
 		DataInputStream dis = new DataInputStream(is);
 		int length = dis.readInt();
 
-		// try jdk 7 acceleration
-		if (!noaccel) {
-			try {
-				LongBuffer buf = LongBuffer.allocate(length / 8 + 1);
+		if (length < 0) {
+			// length field means version
+			int version = -length;
+			if (version == 2) {
+				int numOfhashFunc = dis.readInt();
+				int numOfBits = dis.readInt();
+				int streamLength = dis.readInt();
+				// support 7 only
+
+				LongBuffer buf = LongBuffer.allocate(streamLength / 64 + 1);
 				try {
 					while (true) {
 						long l = dis.readLong();
@@ -114,29 +116,57 @@ public class BloomFilter<T> {
 				}
 
 				buf.flip();
-				this.bitmap = BitSet.valueOf(buf);
+				this.attach(BitSet.valueOf(buf), numOfBits, numOfhashFunc);
 				return;
-			} catch (NoSuchMethodError e) {
+
+			} else {
+				throw new IllegalArgumentException("unsupported version: " + version);
 			}
-		}
+		} else {
+			// version 1 load
+			// try jdk 7 acceleration
+			if (!noaccel) {
+				try {
+					LongBuffer buf = LongBuffer.allocate(length / 64 + 1);
+					try {
+						while (true) {
+							long l = dis.readLong();
+							buf.put(l);
+						}
+					} catch (EOFException eof) {
+					}
 
-		BitSet set = new BitSet(length);
-		int p = 0;
-		try {
-			while (true) {
-				long l = Long.reverse(dis.readLong());
-				for (int i = 63; i >= 0; i--) {
-					if (p >= length)
-						break;
-
-					set.set(p, ((l >> i) & 1) == 1);
-					p++;
+					buf.flip();
+					this.bitmap = BitSet.valueOf(buf);
+					return;
+				} catch (NoSuchMethodError e) {
 				}
 			}
-		} catch (EOFException eof) {
-			// ignore
+
+			BitSet set = new BitSet(length);
+			int p = 0;
+			try {
+				while (true) {
+					long l = Long.reverse(dis.readLong());
+					for (int i = 63; i >= 0; i--) {
+						if (p >= length)
+							break;
+
+						set.set(p, ((l >> i) & 1) == 1);
+						p++;
+					}
+				}
+			} catch (EOFException eof) {
+				// ignore
+			}
+			this.bitmap = set;
 		}
-		this.bitmap = set;
+	}
+
+	private void attach(BitSet bm, int numOfBits, int numOfHash) {
+		this.bitmap = bm;
+		this.numOfBits = numOfBits;
+		this.numOfHashFunction = numOfHash;
 	}
 
 	public long streamLength() {
@@ -147,13 +177,13 @@ public class BloomFilter<T> {
 		if (!noaccel) {
 			try {
 				long[] words = bitmap.toLongArray();
-				return words.length * 8 + 4;
+				return words.length * 8 + getStreamHeaderLength();
 			} catch (NoSuchMethodError e) {
 			}
 		}
 
 		int count = 0;
-		long wrote = 4;
+		long wrote = getStreamHeaderLength();
 		for (int i = 0; i < bitmap.length(); i++) {
 			if (count++ == 63) {
 				wrote += 8;
@@ -167,12 +197,19 @@ public class BloomFilter<T> {
 		return wrote;
 	}
 
+	private int getStreamHeaderLength() {
+		return 4 * 4;
+	}
+
 	public long save(OutputStream os) throws IOException {
 		return save(os, false);
 	}
 
 	public long save(OutputStream os, boolean noaccel) throws IOException {
 		DataOutputStream dos = new DataOutputStream(os);
+		dos.writeInt(-2); // version
+		dos.writeInt(numOfHashFunction);
+		dos.writeInt(numOfBits);
 		dos.writeInt(bitmap.length());
 
 		// try jdk 7 accelration first
@@ -182,7 +219,7 @@ public class BloomFilter<T> {
 				for (long word : words) {
 					dos.writeLong(word);
 				}
-				return words.length * 8 + 4;
+				return words.length * 8 + getStreamHeaderLength();
 			} catch (NoSuchMethodError e) {
 			}
 		}
@@ -190,7 +227,7 @@ public class BloomFilter<T> {
 		int count = 0;
 
 		long l = 0;
-		long wrote = 4;
+		long wrote = getStreamHeaderLength(); // header length (version, hash func count, length)
 		for (int i = 0; i < bitmap.length(); i++) {
 			l <<= 1;
 			l |= bitmap.get(i) ? 1 : 0;
@@ -243,6 +280,10 @@ public class BloomFilter<T> {
 			assert numOfBits > capacity;
 			assert numOfHashFunction > 1;
 		}
+	}
+
+	public int getHashFuncCount() {
+		return numOfHashFunction;
 	}
 
 }

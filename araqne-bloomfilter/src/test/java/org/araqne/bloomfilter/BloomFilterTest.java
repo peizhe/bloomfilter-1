@@ -4,6 +4,7 @@ import static org.junit.Assert.*;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Date;
@@ -21,17 +22,17 @@ public class BloomFilterTest {
 	// success : 0-1, 2, 3, 1-2, 3, 2-1, 3-1
 	@SuppressWarnings("unchecked")
 	public void init(int num, boolean doMap) {
-		filter = new BloomFilter<String>(GeneralHashFunction.stringHashFunctions[2], GeneralHashFunction.stringHashFunctions[1]);
+		filter = new BloomFilter<String>(0.001, 10000, GeneralHashFunction.stringHashFunctions[2], GeneralHashFunction.stringHashFunctions[1]);
 		map = new HashSet<String>(num);
 
 		String in;
-		for (int i = 0; i < num; i++) {
+		for (int i = 0; i < num / 2; i++) {
 			in = VMIDGen.next();
 			filter.add(in);
 			if (doMap)
 				map.add(in);
 		}
-		for (int i = 0; i < num; i++) {
+		for (int i = 0; i < num / 2; i++) {
 			in = UIDGen.next();
 			filter.add(in);
 			if (doMap)
@@ -53,19 +54,19 @@ public class BloomFilterTest {
 	@Test
 	public void doesNotContain() {
 		System.out.println(new Date());
-		init(500000, false);
+		init(10000, false);
 		int count = 0;
-		for (int i = 0; i < 50000; i++) {
+		for (int i = 0; i < 10000; i++) {
 			if (filter.contains(VMIDGen.next()))
 				count++;
 		}
-		for (int i = 0; i < 50000; i++) {
+		for (int i = 0; i < 10000; i++) {
 			if (filter.contains(UIDGen.next()))
 				count++;
 		}
 
-		System.out.printf("false positive count: %d, rate : %f\n", count, count / 5000D);
-		assertTrue(count < 1000);
+		System.out.printf("false positive count: %d, rate : %f\n", count, count / 20000D);
+		assertTrue(count < 20);
 		System.out.println(new Date());
 	}
 
@@ -91,12 +92,18 @@ public class BloomFilterTest {
 
 		BloomFilter<String> nbf2 = new BloomFilter<String>(100);
 		nbf2.load(new ByteArrayInputStream(b1), true);
+		
+		BloomFilter<String> nbf3 = new BloomFilter<String>(); // test config loading
+		nbf3.load(new ByteArrayInputStream(b1));
 
 		assertTrue(filter.contains("test"));
 		assertTrue(nbf1.contains("test"));
 		assertTrue(nbf2.contains("test"));
+		assertTrue(nbf3.contains("test"));
 		assertTrue(filter.getBitmap().equals(nbf1.getBitmap()));
 		assertTrue(filter.getBitmap().equals(nbf2.getBitmap()));
+		assertTrue(filter.getBitmap().equals(nbf3.getBitmap()));
+		assertTrue(filter.getHashFuncCount() == nbf3.getHashFuncCount());
 		assertTrue(nbf1.getBitmap().equals(nbf2.getBitmap()));
 	}
 
@@ -110,5 +117,38 @@ public class BloomFilterTest {
 		static String next() {
 			return new java.rmi.server.UID().toString();
 		}
+	}
+
+	@Test
+	public void saveAndLoadBackwardCompatTest() throws IOException {
+		BloomFilter<String> f = new BloomFilter<String>(0.1, 30000);
+		for (int i = 0; i < 30000; ++i) {
+			f.add("token" + i);
+		}
+		// old ver save
+		ByteArrayOutputStream os = new ByteArrayOutputStream();
+		DataOutputStream dos = new DataOutputStream(os);
+		dos.writeInt(f.getBitmap().length());
+
+		// try jdk 7 accelration first
+		try {
+			long[] words = f.getBitmap().toLongArray();
+			for (long word : words) {
+				dos.writeLong(word);
+			}
+		} catch (NoSuchMethodError e) {
+		}
+
+		dos.close();
+		os.close();
+		
+		byte[] oldVerOutput = os.toByteArray();
+
+		BloomFilter<String> nf = new BloomFilter<String>(0.1, 30000);
+		nf.load(new ByteArrayInputStream(oldVerOutput));
+		assertTrue(f.getHashFuncCount() == nf.getHashFuncCount());
+		assertTrue(f.getBitmap().size() == nf.getBitmap().size());
+		assertTrue(nf.contains("token1423"));
+		assertTrue(nf.contains("token14230"));
 	}
 }
