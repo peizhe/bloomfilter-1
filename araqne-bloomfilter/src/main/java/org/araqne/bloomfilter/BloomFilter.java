@@ -62,7 +62,7 @@ public class BloomFilter<T> {
 	public BloomFilter(double errorRate, int capacity) {
 		this(errorRate, capacity, GeneralHashFunction.stringHashFunctions[2], GeneralHashFunction.stringHashFunctions[1]);
 	}
-	
+
 	public void add(T key) {
 		int firstHashCode = firstFunction.hashCode(key);
 		int secondHashCode = secondFunction.hashCode(key);
@@ -116,8 +116,30 @@ public class BloomFilter<T> {
 				}
 
 				buf.flip();
-				this.attach(BitSet.valueOf(buf), numOfBits, numOfhashFunc);
-				return;
+				try {
+					this.attach(BitSet.valueOf(buf), numOfBits, numOfhashFunc);
+					return;
+				} catch (NoSuchMethodError e) {
+					// JRE 6 support
+					BitSet set = new BitSet(numOfBits);
+					int p = 0;
+					try {
+						while (true) {
+							long l = Long.reverse(dis.readLong());
+							for (int i = 63; i >= 0; i--) {
+								if (p >= length)
+									break;
+
+								set.set(p, ((l >> i) & 1) == 1);
+								p++;
+							}
+						}
+					} catch (EOFException eof) {
+						// ignore
+					}
+					this.attach(set, numOfBits, numOfhashFunc);
+					return;
+				}
 
 			} else {
 				throw new IllegalArgumentException("unsupported version: " + version);
