@@ -62,11 +62,11 @@ public class BloomFilter<T> {
 	public BloomFilter(double errorRate, int capacity) {
 		this(errorRate, capacity, GeneralHashFunction.stringHashFunctions[2], GeneralHashFunction.stringHashFunctions[1]);
 	}
-	
+
 	public HashValue<T> getHashValue(T key) {
 		return new HashValue<T>(key, firstFunction, secondFunction);
 	}
-	
+
 	public void add(HashValue<T> v) {
 		for (int i = 0; i < numOfHashFunction; i++) {
 			int index = getIndex(v.getFirstHashCode(), v.getSecondHashCode(), i);
@@ -75,11 +75,11 @@ public class BloomFilter<T> {
 	}
 
 	public void add(T key) {
-		HashValue<T> v = new HashValue<T>(key, firstFunction, secondFunction); 
+		HashValue<T> v = new HashValue<T>(key, firstFunction, secondFunction);
 
 		add(v);
 	}
-	
+
 	public boolean contains(HashValue<T> v) {
 		for (int i = 0; i < numOfHashFunction; i++) {
 			int index = getIndex(v.getFirstHashCode(), v.getSecondHashCode(), i);
@@ -126,30 +126,28 @@ public class BloomFilter<T> {
 				}
 
 				buf.flip();
-				try {
-					this.attach(BitSet.valueOf(buf), numOfBits, numOfhashFunc);
-					return;
-				} catch (NoSuchMethodError e) {
-					// JRE 6 support
-					BitSet set = new BitSet(numOfBits);
-					int p = 0;
+				if (!noaccel)
 					try {
-						while (true) {
-							long l = Long.reverse(dis.readLong());
-							for (int i = 63; i >= 0; i--) {
-								if (p >= length)
-									break;
-
-								set.set(p, ((l >> i) & 1) == 1);
-								p++;
-							}
-						}
-					} catch (EOFException eof) {
-						// ignore
+						this.attach(BitSet.valueOf(buf), numOfBits, numOfhashFunc);
+						return;
+					} catch (NoSuchMethodError e) {
 					}
-					this.attach(set, numOfBits, numOfhashFunc);
-					return;
+
+				// JRE 6 support
+				BitSet set = new BitSet(numOfBits);
+				int p = 0;
+				for (int s = 0; s < buf.limit(); ++s) {
+					long l = Long.reverse(buf.get());
+					for (int i = 63; i >= 0; i--) {
+						if (p >= streamLength)
+							break;
+
+						set.set(p, ((l >> i) & 1) == 1);
+						p++;
+					}
 				}
+				this.attach(set, numOfBits, numOfhashFunc);
+				return;
 
 			} else {
 				throw new IllegalArgumentException("unsupported version: " + version);
@@ -157,39 +155,35 @@ public class BloomFilter<T> {
 		} else {
 			// version 1 load
 			// try jdk 7 acceleration
+			LongBuffer buf = LongBuffer.allocate(length / 64 + 1);
+			try {
+				while (true) {
+					long l = dis.readLong();
+					buf.put(l);
+				}
+			} catch (EOFException eof) {
+			}
+			buf.flip();
+
 			if (!noaccel) {
 				try {
-					LongBuffer buf = LongBuffer.allocate(length / 64 + 1);
-					try {
-						while (true) {
-							long l = dis.readLong();
-							buf.put(l);
-						}
-					} catch (EOFException eof) {
-					}
-
-					buf.flip();
 					this.bitmap = BitSet.valueOf(buf);
 					return;
 				} catch (NoSuchMethodError e) {
 				}
 			}
 
-			BitSet set = new BitSet(length);
+			BitSet set = new BitSet(this.numOfBits);
 			int p = 0;
-			try {
-				while (true) {
-					long l = Long.reverse(dis.readLong());
-					for (int i = 63; i >= 0; i--) {
-						if (p >= length)
-							break;
+			for (int s = 0; s < buf.limit(); ++s) {
+				long l = Long.reverse(buf.get());
+				for (int i = 63; i >= 0; i--) {
+					if (p >= length)
+						break;
 
-						set.set(p, ((l >> i) & 1) == 1);
-						p++;
-					}
+					set.set(p, ((l >> i) & 1) == 1);
+					p++;
 				}
-			} catch (EOFException eof) {
-				// ignore
 			}
 			this.bitmap = set;
 		}

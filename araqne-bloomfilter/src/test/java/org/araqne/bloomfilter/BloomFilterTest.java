@@ -136,19 +136,25 @@ public class BloomFilterTest {
 			for (long word : words) {
 				dos.writeLong(word);
 			}
-		} catch (NoSuchMethodError e) {
+
+			dos.close();
+			os.close();
+			
+			byte[] oldVerOutput = os.toByteArray();
+
+			BloomFilter<String> nf = new BloomFilter<String>(0.1, 30000);
+			nf.load(new ByteArrayInputStream(oldVerOutput));
+			BloomFilter<String> nf2 = new BloomFilter<String>(0.1, 30000);
+			nf2.load(new ByteArrayInputStream(oldVerOutput), true);
+			assertTrue(f.getHashFuncCount() == nf.getHashFuncCount());
+			assertTrue(f.getBitmap().size() == nf.getBitmap().size());
+			assertTrue(f.getHashFuncCount() == nf2.getHashFuncCount());
+			assertTrue(f.getBitmap().size() == nf2.getBitmap().size());
+			assertTrue(nf.contains("token1423"));
+			assertTrue(nf.contains("token14230"));
+			assertTrue(nf2.contains("token1423"));
+			assertTrue(nf2.contains("token14230"));
+} catch (NoSuchMethodError e) {
 		}
-
-		dos.close();
-		os.close();
-		
-		byte[] oldVerOutput = os.toByteArray();
-
-		BloomFilter<String> nf = new BloomFilter<String>(0.1, 30000);
-		nf.load(new ByteArrayInputStream(oldVerOutput));
-		assertTrue(f.getHashFuncCount() == nf.getHashFuncCount());
-		assertTrue(f.getBitmap().size() == nf.getBitmap().size());
-		assertTrue(nf.contains("token1423"));
-		assertTrue(nf.contains("token14230"));
 	}
 }
