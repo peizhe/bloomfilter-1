@@ -22,7 +22,8 @@ public class BloomFilterTest {
 	// success : 0-1, 2, 3, 1-2, 3, 2-1, 3-1
 	@SuppressWarnings("unchecked")
 	public void init(int num, boolean doMap) {
-		filter = new BloomFilter<String>(0.001, 10000, GeneralHashFunction.stringHashFunctions[2], GeneralHashFunction.stringHashFunctions[1]);
+		filter = new BloomFilter<String>(0.001, 10000, GeneralHashFunction.stringHashFunctions[2],
+				GeneralHashFunction.stringHashFunctions[1]);
 		map = new HashSet<String>(num);
 
 		String in;
@@ -92,7 +93,7 @@ public class BloomFilterTest {
 
 		BloomFilter<String> nbf2 = new BloomFilter<String>(100);
 		nbf2.load(new ByteArrayInputStream(b1), true);
-		
+
 		BloomFilter<String> nbf3 = new BloomFilter<String>(); // test config loading
 		nbf3.load(new ByteArrayInputStream(b1));
 
@@ -139,7 +140,7 @@ public class BloomFilterTest {
 
 			dos.close();
 			os.close();
-			
+
 			byte[] oldVerOutput = os.toByteArray();
 
 			BloomFilter<String> nf = new BloomFilter<String>(0.1, 30000);
@@ -154,7 +155,7 @@ public class BloomFilterTest {
 			assertTrue(nf.contains("token14230"));
 			assertTrue(nf2.contains("token1423"));
 			assertTrue(nf2.contains("token14230"));
-} catch (NoSuchMethodError e) {
+		} catch (NoSuchMethodError e) {
 		}
 	}
 }
