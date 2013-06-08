@@ -62,27 +62,37 @@ public class BloomFilter<T> {
 	public BloomFilter(double errorRate, int capacity) {
 		this(errorRate, capacity, GeneralHashFunction.stringHashFunctions[2], GeneralHashFunction.stringHashFunctions[1]);
 	}
-
-	public void add(T key) {
-		int firstHashCode = firstFunction.hashCode(key);
-		int secondHashCode = secondFunction.hashCode(key);
-
+	
+	public HashValue<T> getHashValue(T key) {
+		return new HashValue<T>(key, firstFunction, secondFunction);
+	}
+	
+	public void add(HashValue<T> v) {
 		for (int i = 0; i < numOfHashFunction; i++) {
-			int index = getIndex(firstHashCode, secondHashCode, i);
+			int index = getIndex(v.getFirstHashCode(), v.getSecondHashCode(), i);
 			this.bitmap.set(index);
 		}
 	}
 
-	public boolean contains(T key) {
-		int firstHashCode = firstFunction.hashCode(key);
-		int secondHashCode = secondFunction.hashCode(key);
+	public void add(T key) {
+		HashValue<T> v = new HashValue<T>(key, firstFunction, secondFunction); 
 
+		add(v);
+	}
+	
+	public boolean contains(HashValue<T> v) {
 		for (int i = 0; i < numOfHashFunction; i++) {
-			int index = getIndex(firstHashCode, secondHashCode, i);
+			int index = getIndex(v.getFirstHashCode(), v.getSecondHashCode(), i);
 			if (this.bitmap.get(index) == false)
 				return false;
 		}
 		return true;
+	}
+
+	public boolean contains(T key) {
+		HashValue<T> v = new HashValue<T>(key, firstFunction, secondFunction);
+
+		return contains(v);
 	}
 
 	public BitSet getBitmap() {
