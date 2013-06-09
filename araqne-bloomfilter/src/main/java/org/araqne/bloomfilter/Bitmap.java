@@ -19,7 +19,6 @@ import java.nio.ByteBuffer;
 
 public class Bitmap {
 	private int bits;
-	private byte[] array;
 	private ByteBuffer bb;
 
 	public Bitmap(int bits) {
@@ -29,13 +28,11 @@ public class Bitmap {
 			size += 8;
 
 		this.bb = ByteBuffer.allocate(size);
-		this.array = bb.array();
 	}
 
 	public Bitmap(int bits, ByteBuffer bb) {
 		this.bits = bits;
 		this.bb = bb;
-		this.array = bb.array();
 	}
 
 	public ByteBuffer getBytes() {
@@ -43,11 +40,11 @@ public class Bitmap {
 	}
 
 	public int length() {
-		return bb.array().length * 8;
+		return bb.capacity() * 8;
 	}
 
 	public int getByteLength() {
-		return bb.array().length;
+		return bb.capacity();
 	}
 
 	public boolean get(int index) {
@@ -55,7 +52,7 @@ public class Bitmap {
 		int p = (l << 3) + (7 - ((index >> 3) & 7));
 		int m = index & 0x7;
 		byte mask = (byte) (1 << m);
-		return (array[p] & mask) != 0;
+		return (bb.get(p) & mask) != 0;
 	}
 
 	public void set(int index) {
@@ -69,6 +66,6 @@ public class Bitmap {
 		int p = (l << 3) + (7 - ((index >> 3) & 7));
 		int m = index & 0x7;
 		byte mask = (byte) (1 << m);
-		array[p] |= mask;
+		bb.put(p, (byte) (bb.get(p) | mask));
 	}
 }

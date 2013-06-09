@@ -59,8 +59,25 @@ public class BloomFilter2<T> {
 		attach(new Bitmap(opt.numOfBits), opt.numOfBits, opt.numOfHashFunction);
 	}
 
+	@SuppressWarnings("unchecked")
 	public BloomFilter2(double errorRate, int capacity) {
 		this(errorRate, capacity, GeneralHashFunction.stringHashFunctions[2], GeneralHashFunction.stringHashFunctions[1]);
+	}
+
+	// for version 1 compatibility
+	@SuppressWarnings("unchecked")
+	public BloomFilter2(double errorRate, int capacity, ByteBuffer bb) {
+		OptimumFinder opt = new OptimumFinder(errorRate, capacity);
+		this.firstFunction = GeneralHashFunction.stringHashFunctions[2];
+		this.secondFunction = GeneralHashFunction.stringHashFunctions[1];
+		attach(new Bitmap(opt.numOfBits, bb), opt.numOfBits, opt.numOfHashFunction);
+	}
+
+	@SuppressWarnings("unchecked")
+	public BloomFilter2(int numOfBits, int numOfHashFuncs, ByteBuffer bb) {
+		this.firstFunction = GeneralHashFunction.stringHashFunctions[2];
+		this.secondFunction = GeneralHashFunction.stringHashFunctions[1];
+		this.attach(new Bitmap(numOfBits, bb), numOfBits, numOfHashFuncs);
 	}
 
 	public HashValue<T> getHashValue(T key) {
@@ -107,7 +124,7 @@ public class BloomFilter2<T> {
 			// length field means version
 			int version = -length;
 			if (version == 2) {
-				int numOfhashFunc = dis.readInt();
+				int numOfHashFunc = dis.readInt();
 				int numOfBits = dis.readInt();
 				int streamLength = dis.readInt();
 
@@ -121,8 +138,8 @@ public class BloomFilter2<T> {
 				} catch (EOFException eof) {
 				}
 
-				bb.flip();
-				this.attach(new Bitmap(numOfBits, bb), numOfBits, numOfhashFunc);
+				bb.limit(bb.capacity());
+				this.attach(new Bitmap(numOfBits, bb), numOfBits, numOfHashFunc);
 				return;
 			} else {
 				throw new IllegalArgumentException("unsupported version: " + version);
