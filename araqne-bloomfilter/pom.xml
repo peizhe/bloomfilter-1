@@ -9,10 +9,10 @@
 		<version>1.0.0</version>
 	</parent>
 	<artifactId>araqne-bloomfilter</artifactId>
-	<version>1.0.2</version>
+	<version>1.1.0</version>
 	<packaging>bundle</packaging>
 	<name>Araqne Bloom Filter</name>
-	
+
 	<repositories>
 		<repository>
 			<id>araqne</id>

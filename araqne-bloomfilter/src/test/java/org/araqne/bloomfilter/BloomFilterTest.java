@@ -1,6 +1,7 @@
 package org.araqne.bloomfilter;
 
-import static org.junit.Assert.*;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -11,7 +12,6 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class BloomFilterTest {
@@ -22,7 +22,7 @@ public class BloomFilterTest {
 	// success : 0-1, 2, 3, 1-2, 3, 2-1, 3-1
 	@SuppressWarnings("unchecked")
 	public void init(int num, boolean doMap) {
-		filter = new BloomFilter<String>(0.001, 10000, GeneralHashFunction.stringHashFunctions[2],
+		filter = new BloomFilter<String>(0.001, num, GeneralHashFunction.stringHashFunctions[2],
 				GeneralHashFunction.stringHashFunctions[1]);
 		map = new HashSet<String>(num);
 
@@ -54,7 +54,7 @@ public class BloomFilterTest {
 
 	@Test
 	public void doesNotContain() {
-		System.out.println(new Date());
+		long begin = System.currentTimeMillis();
 		init(10000, false);
 		int count = 0;
 		for (int i = 0; i < 10000; i++) {
@@ -68,7 +68,8 @@ public class BloomFilterTest {
 
 		System.out.printf("false positive count: %d, rate : %f\n", count, count / 20000D);
 		assertTrue(count < 20);
-		System.out.println(new Date());
+		long end = System.currentTimeMillis();
+		System.out.println("not contains test elapsed " + (end - begin) + "ms");
 	}
 
 	@Test
@@ -94,7 +95,8 @@ public class BloomFilterTest {
 		BloomFilter<String> nbf2 = new BloomFilter<String>(100);
 		nbf2.load(new ByteArrayInputStream(b1), true);
 
-		BloomFilter<String> nbf3 = new BloomFilter<String>(); // test config loading
+		BloomFilter<String> nbf3 = new BloomFilter<String>(); // test config
+																// loading
 		nbf3.load(new ByteArrayInputStream(b1));
 
 		assertTrue(filter.contains("test"));
