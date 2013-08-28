@@ -22,6 +22,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.WritableByteChannel;
 import java.util.BitSet;
 
 public class BloomFilter2<T> {
@@ -177,15 +179,18 @@ public class BloomFilter2<T> {
 	}
 
 	public long save(OutputStream os) throws IOException {
-		DataOutputStream dos = new DataOutputStream(os);
-		dos.writeInt(-2); // version
-		dos.writeInt(numOfHashFunction);
-		dos.writeInt(numOfBits);
-		dos.writeInt(bitmap.length());
+		ByteBuffer hdr = ByteBuffer.allocate(getStreamHeaderLength());
+		hdr.putInt(-2); // version
+		hdr.putInt(numOfHashFunction);
+		hdr.putInt(numOfBits);
+		hdr.putInt(bitmap.length());
+		hdr.flip();
 
-		ByteBuffer bb = bitmap.getBytes();
-		dos.write(bb.array());
-		return bb.array().length + getStreamHeaderLength();
+		WritableByteChannel newChannel = Channels.newChannel(os);
+		newChannel.write(hdr);
+		ByteBuffer bytes = bitmap.getBytes();
+		int wrote = newChannel.write(bytes);
+		return wrote + getStreamHeaderLength();
 	}
 
 	@Override
