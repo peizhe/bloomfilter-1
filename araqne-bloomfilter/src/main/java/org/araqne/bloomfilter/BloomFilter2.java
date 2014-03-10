@@ -188,7 +188,10 @@ public class BloomFilter2<T> {
 		WritableByteChannel newChannel = Channels.newChannel(os);
 		newChannel.write(hdr);
 		ByteBuffer bytes = bitmap.getBytes();
+		int pos = bytes.position();
+		bytes.position(0);
 		int wrote = newChannel.write(bytes);
+		bytes.position(pos);
 		return wrote + getStreamHeaderLength();
 	}
 
