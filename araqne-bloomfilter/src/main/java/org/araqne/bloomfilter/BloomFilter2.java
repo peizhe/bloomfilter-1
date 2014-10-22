@@ -99,6 +99,9 @@ public class BloomFilter2<T> {
 	}
 
 	public boolean contains(HashValue<T> v) {
+		if (numOfBits == 0)
+			return false;
+
 		for (int i = 0; i < numOfHashFunction; i++) {
 			int index = getIndex(v.getFirstHashCode(), v.getSecondHashCode(), i);
 			if (this.bitmap.get(index) == false)
